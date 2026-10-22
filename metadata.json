@@ -1,0 +1,6 @@
+{
+  "name": "WanderHub - Trip Portal & Community Platform",
+  "description": "Scalable microservices trip portal and mobile platform for trip organizers and travelers with secure payments, real-time booking, group chat, and automated notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
