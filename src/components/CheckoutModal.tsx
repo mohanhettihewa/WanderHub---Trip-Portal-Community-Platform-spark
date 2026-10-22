@@ -30,20 +30,22 @@ interface CheckoutModalProps {
   onClose: () => void;
   onSuccess: (booking: Booking) => void;
   onOpenChat: (trip: Trip) => void;
+  onUserChange?: (user: any) => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   trip,
   onClose,
   onSuccess,
-  onOpenChat
+  onOpenChat,
+  onUserChange
 }) => {
-  const currentUser = authService.getCurrentUser();
+  const [activeUser, setActiveUser] = useState(() => authService.getCurrentUser());
   const availableSeats = trip.maxSeats - trip.bookedSeats;
 
   const [seats, setSeats] = useState<number>(1);
   const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
-  const [cardHolder, setCardHolder] = useState(currentUser.name);
+  const [cardHolder, setCardHolder] = useState(activeUser.name);
   const [expiryDate, setExpiryDate] = useState('08/28');
   const [cvv, setCvv] = useState('892');
   
@@ -79,6 +81,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleSwitchToParticipant = () => {
+    const marcus = authService.switchUser('usr_part_01');
+    setActiveUser(marcus);
+    setCardHolder(marcus.name);
+    setErrorMessage(null);
+    if (onUserChange) {
+      onUserChange(marcus);
+    }
   };
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,6 +260,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-6 text-xs text-slate-700">
               
+              {/* Organizer Role Guard Banner with 1-Click Switch */}
+              {activeUser.role === 'Organizer' && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-xs">Signed in as Organizer ({activeUser.name})</p>
+                    <p className="text-[11px] text-amber-800">
+                      RBAC enforces that only <strong>Participant</strong> accounts can book expedition seats.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSwitchToParticipant}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-semibold shrink-0 transition-colors"
+                  >
+                    Switch to Participant (Marcus Vance)
+                  </button>
+                </div>
+              )}
+
               {errorMessage && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-medium flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />

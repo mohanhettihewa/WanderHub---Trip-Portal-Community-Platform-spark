@@ -6,7 +6,7 @@
  */
 
 import { ChatMessage, UserRole } from '../types';
-import { authService } from './authService';
+import { authService, AVATAR_ELENA, AVATAR_MARCUS, AVATAR_SARAH } from './authService';
 import { eventBus } from './eventBus';
 
 const SEED_CHAT_MESSAGES: ChatMessage[] = [
@@ -16,7 +16,7 @@ const SEED_CHAT_MESSAGES: ChatMessage[] = [
     senderId: 'usr_org_01',
     senderName: 'Elena Rostova',
     senderRole: 'Organizer',
-    senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    senderAvatar: AVATAR_ELENA,
     message: 'Welcome everyone to the Annapurna Ridge Expedition! Please make sure your passport has at least 6 months validity from departure date for Nepal visa processing.',
     timestamp: '2026-10-16T09:00:00Z',
     isAnnouncement: true
@@ -27,7 +27,7 @@ const SEED_CHAT_MESSAGES: ChatMessage[] = [
     senderId: 'usr_part_01',
     senderName: 'Marcus Vance',
     senderRole: 'Participant',
-    senderAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    senderAvatar: AVATAR_MARCUS,
     message: 'Excited to be joining! Quick question Elena: are microspikes needed or will heavy lug Vibram boots suffice for the sanctuary moraine?',
     timestamp: '2026-10-16T11:24:00Z'
   },
@@ -37,7 +37,7 @@ const SEED_CHAT_MESSAGES: ChatMessage[] = [
     senderId: 'usr_org_01',
     senderName: 'Elena Rostova',
     senderRole: 'Organizer',
-    senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    senderAvatar: AVATAR_ELENA,
     message: 'Great question Marcus. Heavy lug boots are great for the ascent, but we will provide lightweight Kahtoola microspikes in Pokhara for the final icy approach past Deurali.',
     timestamp: '2026-10-16T11:45:00Z'
   },
@@ -47,13 +47,22 @@ const SEED_CHAT_MESSAGES: ChatMessage[] = [
     senderId: 'usr_part_02',
     senderName: 'Sarah Chen',
     senderRole: 'Participant',
-    senderAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+    senderAvatar: AVATAR_SARAH,
     message: 'Hello team! Anyone flying out through Doha on Qatar Airways on Nov 9? Would love to share airport transfer into Pokhara.',
     timestamp: '2026-10-18T16:15:00Z'
   }
 ];
 
 const STORAGE_KEY_CHAT = 'wanderhub_chat_messages';
+
+function resolveAvatar(senderId: string, existingAvatar?: string): string {
+  if (existingAvatar && !existingAvatar.includes('unsplash.com')) {
+    return existingAvatar;
+  }
+  if (senderId === 'usr_part_01') return AVATAR_MARCUS;
+  if (senderId === 'usr_part_02') return AVATAR_SARAH;
+  return AVATAR_ELENA;
+}
 
 class ChatService {
   private messages: ChatMessage[] = [];
@@ -62,12 +71,20 @@ class ChatService {
     const saved = localStorage.getItem(STORAGE_KEY_CHAT);
     if (saved) {
       try {
-        this.messages = JSON.parse(saved);
+        const parsed: ChatMessage[] = JSON.parse(saved);
+        // Clean up any legacy test-pollution messages and upgrade Unsplash avatars
+        this.messages = parsed
+          .filter(m => m.message !== 'Trying to make an announcement')
+          .map(m => ({
+            ...m,
+            senderAvatar: resolveAvatar(m.senderId, m.senderAvatar)
+          }));
+        this.saveToStorage();
       } catch {
-        this.messages = SEED_CHAT_MESSAGES;
+        this.messages = [...SEED_CHAT_MESSAGES];
       }
     } else {
-      this.messages = SEED_CHAT_MESSAGES;
+      this.messages = [...SEED_CHAT_MESSAGES];
       this.saveToStorage();
     }
 
@@ -88,6 +105,21 @@ class ChatService {
   }
 
   /**
+   * Synchronize chat messages with the live Python FastAPI backend.
+   */
+  public syncFromBackend(messages: ChatMessage[]): void {
+    if (Array.isArray(messages) && messages.length > 0) {
+      this.messages = messages
+        .filter(m => m.message !== 'Trying to make an announcement')
+        .map(m => ({
+          ...m,
+          senderAvatar: resolveAvatar(m.senderId, m.senderAvatar)
+        }));
+      this.saveToStorage();
+    }
+  }
+
+  /**
    * Fetch all messages for a specific trip channel.
    */
   public getMessagesForTrip(tripId: string): ChatMessage[] {
@@ -96,8 +128,9 @@ class ChatService {
 
   /**
    * Send a new message to a trip group chat channel.
+   * When `syncBackend` is false (e.g., during unit tests), avoids persisting to backend.
    */
-  public sendMessage(tripId: string, text: string, isAnnouncement: boolean = false): ChatMessage {
+  public sendMessage(tripId: string, text: string, isAnnouncement: boolean = false, syncBackend: boolean = true): ChatMessage {
     const currentUser = authService.getCurrentUser();
     authService.assertPermission(currentUser, 'SEND_CHAT_MESSAGE');
 
@@ -123,6 +156,23 @@ class ChatService {
     this.messages.push(newMessage);
     this.saveToStorage();
 
+    if (syncBackend) {
+      fetch('/api/v1/chat/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id
+        },
+        body: JSON.stringify({
+          tripId,
+          message: text.trim(),
+          isAnnouncement: canAnnounce
+        })
+      }).catch(() => {
+        // Fallback handled locally
+      });
+    }
+
     eventBus.publish({
       type: 'CHAT_MESSAGE_SENT',
       payload: { message: newMessage }
@@ -141,7 +191,7 @@ class ChatService {
       senderId: 'sys_bot',
       senderName: 'WanderHub Expeditions',
       senderRole: 'Organizer' as UserRole,
-      senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+      senderAvatar: AVATAR_ELENA,
       message: text,
       timestamp: new Date().toISOString(),
       isAnnouncement: true
@@ -151,10 +201,22 @@ class ChatService {
   }
 
   /**
+   * Snapshot and restore chat messages for isolated unit tests.
+   */
+  public getSnapshot(): ChatMessage[] {
+    return JSON.parse(JSON.stringify(this.messages));
+  }
+
+  public restoreSnapshot(snapshot: ChatMessage[]): void {
+    this.messages = JSON.parse(JSON.stringify(snapshot));
+    this.saveToStorage();
+  }
+
+  /**
    * Reset messages to seed for testing.
    */
   public resetToSeeds(): void {
-    this.messages = SEED_CHAT_MESSAGES;
+    this.messages = [...SEED_CHAT_MESSAGES];
     this.saveToStorage();
   }
 }

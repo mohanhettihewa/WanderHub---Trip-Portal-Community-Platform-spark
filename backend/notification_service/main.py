@@ -4,11 +4,22 @@ Port: 8005
 Framework: FastAPI (Python 3.10+ / 3.12+), Pydantic v2
 """
 
+import os
+import sys
 from typing import List, Optional
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+try:
+    from fastapi import FastAPI, HTTPException, status
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel, EmailStr
+except ImportError:
+    from fastapi_runtime import (
+        FastAPI, HTTPException, status,
+        CORSMiddleware, BaseModel, EmailStr
+    )
 
 app = FastAPI(
     title="WanderHub Notification Microservice",

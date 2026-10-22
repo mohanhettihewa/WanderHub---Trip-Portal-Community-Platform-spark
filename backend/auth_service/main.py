@@ -4,15 +4,27 @@ Port: 8001
 Framework: FastAPI (Python 3.10+ / 3.12+), PyJWT, Passlib, Pydantic v2
 """
 
+import os
+import sys
 from enum import Enum
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, Dict
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, Field
-import jwt
-from passlib.context import CryptContext
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+try:
+    from fastapi import FastAPI, Depends, HTTPException, status
+    from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel, EmailStr, Field
+    import jwt
+    from passlib.context import CryptContext
+except ImportError:
+    from fastapi_runtime import (
+        FastAPI, Depends, HTTPException, status,
+        OAuth2PasswordBearer, OAuth2PasswordRequestForm,
+        CORSMiddleware, BaseModel, EmailStr, Field, jwt, CryptContext
+    )
 
 app = FastAPI(
     title="WanderHub Auth & RBAC Microservice",

@@ -6,7 +6,7 @@
  */
 
 import { Trip, TripCategory, TripDifficulty } from '../types';
-import { authService } from './authService';
+import { authService, AVATAR_ELENA } from './authService';
 import { eventBus } from './eventBus';
 
 const SEED_TRIPS: Trip[] = [
@@ -27,7 +27,7 @@ const SEED_TRIPS: Trip[] = [
     difficulty: 'Challenging',
     organizerId: 'usr_org_01',
     organizerName: 'Elena Rostova',
-    organizerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    organizerAvatar: AVATAR_ELENA,
     organizerContact: '+1 (555) 234-8901',
     coverGradient: 'from-sky-900 via-indigo-950 to-slate-900',
     featuredIcon: 'mountain',
@@ -79,7 +79,7 @@ const SEED_TRIPS: Trip[] = [
     difficulty: 'Moderate',
     organizerId: 'usr_org_01',
     organizerName: 'Elena Rostova',
-    organizerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    organizerAvatar: AVATAR_ELENA,
     organizerContact: '+1 (555) 234-8901',
     coverGradient: 'from-emerald-900 via-teal-950 to-slate-900',
     featuredIcon: 'waves',
@@ -128,7 +128,7 @@ const SEED_TRIPS: Trip[] = [
     difficulty: 'Moderate',
     organizerId: 'usr_org_01',
     organizerName: 'Elena Rostova',
-    organizerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    organizerAvatar: AVATAR_ELENA,
     organizerContact: '+1 (555) 234-8901',
     coverGradient: 'from-amber-900 via-orange-950 to-stone-900',
     featuredIcon: 'compass',
@@ -176,7 +176,7 @@ const SEED_TRIPS: Trip[] = [
     difficulty: 'Challenging',
     organizerId: 'usr_org_01',
     organizerName: 'Elena Rostova',
-    organizerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+    organizerAvatar: AVATAR_ELENA,
     organizerContact: '+1 (555) 234-8901',
     coverGradient: 'from-blue-950 via-slate-900 to-cyan-950',
     featuredIcon: 'snowflake',
@@ -217,18 +217,38 @@ class TripService {
     const saved = localStorage.getItem(STORAGE_KEY_TRIPS);
     if (saved) {
       try {
-        this.trips = JSON.parse(saved);
+        const parsed: Trip[] = JSON.parse(saved);
+        // Upgrade any legacy Unsplash URLs to resilient SVG data URIs
+        this.trips = parsed.map(t => ({
+          ...t,
+          organizerAvatar: t.organizerAvatar?.includes('unsplash.com') ? AVATAR_ELENA : t.organizerAvatar
+        }));
       } catch {
-        this.trips = SEED_TRIPS;
+        this.trips = [...SEED_TRIPS];
       }
     } else {
-      this.trips = SEED_TRIPS;
+      this.trips = [...SEED_TRIPS];
       this.saveToStorage();
     }
   }
 
   private saveToStorage(): void {
     localStorage.setItem(STORAGE_KEY_TRIPS, JSON.stringify(this.trips));
+  }
+
+  /**
+   * Synchronize trip inventory with the live Python FastAPI backend.
+   */
+  public syncFromBackend(trips: Trip[]): void {
+    if (Array.isArray(trips) && trips.length > 0) {
+      this.trips = trips.map(t => ({
+        ...t,
+        organizerAvatar: (!t.organizerAvatar || t.organizerAvatar.includes('unsplash.com'))
+          ? AVATAR_ELENA
+          : t.organizerAvatar
+      }));
+      this.saveToStorage();
+    }
   }
 
   /**
@@ -294,6 +314,18 @@ class TripService {
 
     this.trips.unshift(newTrip);
     this.saveToStorage();
+
+    // Sync to live Python FastAPI backend
+    fetch('/api/v1/trips', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': currentUser.id
+      },
+      body: JSON.stringify(newTrip)
+    }).catch(() => {
+      // Fallback handled locally
+    });
 
     eventBus.publish({
       type: 'TRIP_CREATED',
@@ -365,10 +397,22 @@ class TripService {
   }
 
   /**
+   * Snapshot and restore trip state for isolated unit testing.
+   */
+  public getSnapshot(): Trip[] {
+    return JSON.parse(JSON.stringify(this.trips));
+  }
+
+  public restoreSnapshot(snapshot: Trip[]): void {
+    this.trips = JSON.parse(JSON.stringify(snapshot));
+    this.saveToStorage();
+  }
+
+  /**
    * Reset trips to original seeds for testing.
    */
   public resetToSeeds(): void {
-    this.trips = SEED_TRIPS;
+    this.trips = [...SEED_TRIPS];
     this.saveToStorage();
   }
 }

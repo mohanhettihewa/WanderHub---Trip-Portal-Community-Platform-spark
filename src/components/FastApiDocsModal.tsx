@@ -5,7 +5,7 @@
  * microservice codebases, Pydantic v2 data models, and RBAC security dependencies.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileCode2, 
   Server, 
@@ -16,13 +16,22 @@ import {
   ShieldCheck, 
   Cpu, 
   Zap,
-  Terminal
+  Terminal,
+  Activity
 } from 'lucide-react';
 import { FASTAPI_MICROSERVICES, FastApiServiceDoc } from '../services/fastapi_reference/fastapi_microservices';
 
 export const FastApiDocsModal: React.FC = () => {
   const [selectedService, setSelectedService] = useState<FastApiServiceDoc>(FASTAPI_MICROSERVICES[0]);
   const [copied, setCopied] = useState(false);
+  const [backendHealth, setBackendHealth] = useState<{ status: string; runtime?: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/v1/health')
+      .then(res => res.json())
+      .then(data => setBackendHealth(data))
+      .catch(() => setBackendHealth(null));
+  }, []);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(selectedService.pythonSourceCode);
@@ -38,7 +47,13 @@ export const FastApiDocsModal: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 uppercase tracking-wider">
             <Zap className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Python 3.12+ / FastAPI / Asyncio Architecture</span>
+            <span>Python 3 / FastAPI / Asyncio Microservices Architecture</span>
+            {backendHealth?.status === 'healthy' && (
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono text-[10px]">
+                <Activity className="w-3 h-3 text-emerald-600" />
+                Live Gateway: {backendHealth.runtime || 'Python 3.10'}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-display mt-0.5">
             Microservices Specification & Python Implementation
@@ -99,7 +114,7 @@ export const FastApiDocsModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-500">OpenAPI 3.1 Spec:</span>
             <span className="text-xs font-mono bg-white border border-slate-200 px-2 py-1 rounded text-slate-700">
-              /docs (Swagger UI)
+              /api/v1/openapi.json
             </span>
           </div>
         </div>

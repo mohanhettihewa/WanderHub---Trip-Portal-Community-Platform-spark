@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { User, Trip, Booking, GlobalSearchFilters } from './types';
 import { authService } from './services/authService';
 import { tripService } from './services/tripService';
+import { bookingPaymentService } from './services/bookingPaymentService';
+import { chatService } from './services/chatService';
 import { notificationService } from './services/notificationService';
 import { Navbar } from './components/Navbar';
 import { ParticipantView } from './components/ParticipantView';
@@ -38,12 +40,31 @@ export default function App() {
   // Active modals
   const [checkoutTrip, setCheckoutTrip] = useState<Trip | null>(null);
   const [chatTrip, setChatTrip] = useState<Trip | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [, setRefreshTrigger] = useState(0);
 
   const refreshData = () => {
     setTrips(tripService.getTrips());
     setRefreshTrigger(prev => prev + 1);
   };
+
+  // Hydrate initial state from live Python 3 FastAPI Gateway (/api/v1/state)
+  useEffect(() => {
+    fetch('/api/v1/state')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data) return;
+        if (data.users) authService.syncFromBackend(data.users, data.activeUser);
+        if (data.trips) tripService.syncFromBackend(data.trips);
+        if (data.bookings) bookingPaymentService.syncFromBackend(data.bookings);
+        if (data.chatMessages) chatService.syncFromBackend(data.chatMessages);
+        if (data.notifications) notificationService.syncFromBackend(data.notifications);
+        setCurrentUser(authService.getCurrentUser());
+        refreshData();
+      })
+      .catch(() => {
+        // Offline / local fallback already initialized
+      });
+  }, []);
 
   const handleUserChange = (newUser: User) => {
     setCurrentUser(newUser);
@@ -166,6 +187,7 @@ export default function App() {
             refreshData();
           }}
           onOpenChat={(trip) => setChatTrip(trip)}
+          onUserChange={handleUserChange}
         />
       )}
 

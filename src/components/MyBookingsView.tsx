@@ -41,18 +41,24 @@ export const MyBookingsView: React.FC<MyBookingsViewProps> = ({
 }) => {
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
   const [selectedPass, setSelectedPass] = useState<Booking | null>(null);
+  const [feedbackBanner, setFeedbackBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const bookings = bookingPaymentService.getUserBookings(currentUser.id);
 
-  const handleCancelBooking = (bookingId: string) => {
-    if (window.confirm('Are you sure you want to cancel this booking? Held seats will be released immediately.')) {
-      try {
-        bookingPaymentService.cancelBooking(bookingId, 'Traveler voluntary cancellation');
-        setCancellingBookingId(null);
-        onRefresh();
-      } catch (err: any) {
-        alert(err.message || 'Failed to cancel booking');
-      }
+  const handleConfirmCancelBooking = (bookingId: string) => {
+    try {
+      const cancelled = bookingPaymentService.cancelBooking(bookingId, 'Traveler voluntary cancellation');
+      setCancellingBookingId(null);
+      setFeedbackBanner({
+        type: 'success',
+        message: `Booking ${cancelled.bookingCode} cancelled. ${cancelled.seatsBooked} seat(s) released back to inventory.`
+      });
+      onRefresh();
+    } catch (err: any) {
+      setFeedbackBanner({
+        type: 'error',
+        message: err.message || 'Failed to cancel booking'
+      });
     }
   };
 
@@ -80,6 +86,30 @@ export const MyBookingsView: React.FC<MyBookingsViewProps> = ({
           <span>Explore More Trips</span>
         </button>
       </div>
+
+      {/* Inline Feedback Banner */}
+      {feedbackBanner && (
+        <div className={`p-3.5 rounded-2xl border text-xs font-medium flex items-center justify-between ${
+          feedbackBanner.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {feedbackBanner.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{feedbackBanner.message}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackBanner(null)}
+            className="text-xs underline ml-4 opacity-75 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Bookings List */}
       {bookings.length === 0 ? (
@@ -170,13 +200,30 @@ export const MyBookingsView: React.FC<MyBookingsViewProps> = ({
                   )}
 
                   {!isCancelled && (
-                    <button
-                      onClick={() => handleCancelBooking(booking.id)}
-                      className="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-medium transition-colors"
-                      title="Cancel reservation & release seat"
-                    >
-                      Cancel
-                    </button>
+                    cancellingBookingId === booking.id ? (
+                      <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl">
+                        <button
+                          onClick={() => handleConfirmCancelBooking(booking.id)}
+                          className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-semibold transition-colors"
+                        >
+                          Confirm Cancel
+                        </button>
+                        <button
+                          onClick={() => setCancellingBookingId(null)}
+                          className="px-2 py-1 text-slate-600 hover:text-slate-900 text-[11px] font-medium"
+                        >
+                          Keep
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setCancellingBookingId(booking.id)}
+                        className="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-medium transition-colors"
+                        title="Cancel reservation & release seat"
+                      >
+                        Cancel
+                      </button>
+                    )
                   )}
                 </div>
 

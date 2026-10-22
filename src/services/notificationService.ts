@@ -7,6 +7,7 @@
 
 import { EmailNotification, Booking, Trip } from '../types';
 import { authService } from './authService';
+import { bookingPaymentService } from './bookingPaymentService';
 import { eventBus } from './eventBus';
 
 const SEED_NOTIFICATIONS: EmailNotification[] = [
@@ -55,7 +56,7 @@ const SEED_NOTIFICATIONS: EmailNotification[] = [
           <h3 style="font-size: 15px; margin-top: 24px; color: #0f172a;">Next Steps Before Departure</h3>
           <ul style="padding-left: 20px; font-size: 14px; color: #475569;">
             <li>Join the dedicated <strong>Trip Group Chat</strong> to sync with Lead Guide Elena Rostova and fellow climbers.</li>
-            <li>Verify your passport has $\ge 6$ months validity and prepare two passport photos for Kathmandu ACAP permits.</li>
+            <li>Verify your passport has at least 6 months validity and prepare two passport photos for Kathmandu ACAP permits.</li>
             <li>Review the recommended gear checklist in the expedition portal.</li>
           </ul>
 
@@ -83,10 +84,10 @@ class NotificationService {
       try {
         this.notifications = JSON.parse(saved);
       } catch {
-        this.notifications = SEED_NOTIFICATIONS;
+        this.notifications = [...SEED_NOTIFICATIONS];
       }
     } else {
-      this.notifications = SEED_NOTIFICATIONS;
+      this.notifications = [...SEED_NOTIFICATIONS];
       this.saveToStorage();
     }
 
@@ -110,6 +111,16 @@ class NotificationService {
 
   private saveToStorage(): void {
     localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(this.notifications));
+  }
+
+  /**
+   * Synchronize notifications state with the live Python FastAPI backend.
+   */
+  public syncFromBackend(notifications: EmailNotification[]): void {
+    if (Array.isArray(notifications) && notifications.length > 0) {
+      this.notifications = notifications;
+      this.saveToStorage();
+    }
   }
 
   /**
@@ -157,6 +168,9 @@ class NotificationService {
    * Dispatch notification to the Organizer when a new participant joins their trip.
    */
   public sendOrganizerNewBookingEmail(booking: Booking, trip: Trip): void {
+    const organizerUser = authService.getUserById(trip.organizerId);
+    const organizerEmail = organizerUser?.email || 'elena@summitexpeditions.org';
+
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; line-height: 1.6; color: #1e293b;">
         <div style="background-color: #0f172a; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -178,7 +192,7 @@ class NotificationService {
 
     const notification: EmailNotification = {
       id: `notif_org_${Date.now()}`,
-      recipientEmail: 'elena@summitexpeditions.org',
+      recipientEmail: organizerEmail,
       recipientName: trip.organizerName,
       subject: `New Traveler Joined: ${booking.participantName} booked ${trip.title}`,
       category: 'trip_announcement',
@@ -194,19 +208,25 @@ class NotificationService {
   }
 
   /**
-   * Send cancellation notification.
+   * Send cancellation notification to the actual booking owner.
    */
   public sendCancellationEmail(bookingId: string, tripId: string, reason: string): void {
+    const booking = bookingPaymentService.getBookingById(bookingId);
+    const recipientEmail = booking?.participantEmail || authService.getCurrentUser().email;
+    const recipientName = booking?.participantName || authService.getCurrentUser().name;
+    const bookingCode = booking?.bookingCode || bookingId;
+
     const notification: EmailNotification = {
       id: `notif_cancel_${Date.now()}`,
-      recipientEmail: authService.getCurrentUser().email,
-      recipientName: authService.getCurrentUser().name,
-      subject: `Booking Cancelled & Refund Initiated (${bookingId})`,
+      recipientEmail,
+      recipientName,
+      subject: `Booking Cancelled & Refund Initiated (${bookingCode})`,
       category: 'seat_cancelled',
-      previewText: `Your reservation has been cancelled. Reason: ${reason}. Refund is processing.`,
-      htmlContent: `<p>Your booking ${bookingId} has been successfully cancelled and seat inventory released.</p>`,
+      previewText: `Your reservation ${bookingCode} has been cancelled. Reason: ${reason}. Refund is processing.`,
+      htmlContent: `<p>Hi <strong>${recipientName}</strong>,</p><p>Your booking <strong>${bookingCode}</strong> has been successfully cancelled and ${booking?.seatsBooked || 1} seat(s) have been released back to expedition inventory. Reason: ${reason}</p>`,
       sentAt: new Date().toISOString(),
-      read: false
+      read: false,
+      metadata: { tripId, bookingId }
     };
     this.notifications.unshift(notification);
     this.saveToStorage();
@@ -227,6 +247,11 @@ class NotificationService {
     if (item) {
       item.read = true;
       this.saveToStorage();
+      fetch('/api/v1/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notificationId })
+      }).catch(() => {});
     }
   }
 
@@ -240,6 +265,11 @@ class NotificationService {
       }
     });
     this.saveToStorage();
+    fetch('/api/v1/notifications/read-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    }).catch(() => {});
   }
 
   /**
@@ -248,6 +278,11 @@ class NotificationService {
   public deleteNotification(notificationId: string): void {
     this.notifications = this.notifications.filter(n => n.id !== notificationId);
     this.saveToStorage();
+    fetch('/api/v1/notifications/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: notificationId })
+    }).catch(() => {});
   }
 }
 

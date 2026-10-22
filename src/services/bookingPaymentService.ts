@@ -92,6 +92,23 @@ class BookingPaymentService {
   }
 
   /**
+   * Synchronize bookings state from the live Python FastAPI backend.
+   */
+  public syncFromBackend(bookings: Booking[]): void {
+    if (Array.isArray(bookings) && bookings.length > 0) {
+      this.bookings = bookings;
+      this.saveToStorage();
+    }
+  }
+
+  /**
+   * Retrieve booking by ID.
+   */
+  public getBookingById(bookingId: string): Booking | undefined {
+    return this.bookings.find(b => b.id === bookingId);
+  }
+
+  /**
    * Validates credit card credentials against payment gateway specifications.
    */
   public validateCard(payment: PaymentDetails): { valid: boolean; error?: string } {
@@ -139,11 +156,52 @@ class BookingPaymentService {
       throw new Error(`Payment Rejected: ${cardCheck.error}`);
     }
 
-    // 2. Concurrency-safe seat reservation
+    // 2. Attempt live Python FastAPI backend atomic checkout first
+    try {
+      const response = await fetch('/api/v1/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (response.ok) {
+        const backendBooking: Booking = await response.json();
+        tripService.reserveSeats(trip.id, request.seats);
+        this.bookings.unshift(backendBooking);
+        this.saveToStorage();
+
+        await eventBus.publish({
+          type: 'PAYMENT_PROCESSED',
+          payload: { transactionId: backendBooking.paymentTransactionId, amount: backendBooking.totalAmount, currency: backendBooking.currency }
+        });
+
+        await eventBus.publish({
+          type: 'BOOKING_CONFIRMED',
+          payload: { booking: backendBooking, trip }
+        });
+
+        return backendBooking;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        if (errData?.detail) {
+          throw new Error(errData.detail);
+        }
+      }
+    } catch (err: any) {
+      if (err?.message && (err.message.includes('409') || err.message.includes('403') || err.message.includes('400') || err.message.includes('Payment Rejected'))) {
+        throw err;
+      }
+      // Continue with local atomic fallback if network is unreachable
+    }
+
+    // 3. Concurrency-safe seat reservation fallback
     tripService.reserveSeats(trip.id, request.seats);
 
-    // 3. Simulate payment gateway capture delay (300ms)
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // 4. Simulate payment gateway capture delay (250ms)
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     const totalAmount = trip.pricePerPerson * request.seats;
     const last4 = request.payment.cardNumber.replace(/\s+/g, '').slice(-4) || '4242';
@@ -178,7 +236,7 @@ class BookingPaymentService {
     this.bookings.unshift(newBooking);
     this.saveToStorage();
 
-    // 4. Emit events for Notification and Chat microservices
+    // 5. Emit events for Notification and Chat microservices
     await eventBus.publish({
       type: 'PAYMENT_PROCESSED',
       payload: { transactionId: txnId, amount: totalAmount, currency: trip.currency }
@@ -220,6 +278,18 @@ class BookingPaymentService {
 
     // Release seats in Trip inventory
     tripService.releaseSeats(booking.tripId, booking.seatsBooked);
+
+    // Sync cancellation with Python FastAPI backend
+    fetch('/api/v1/bookings/cancel', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': currentUser.id
+      },
+      body: JSON.stringify({ bookingId, reason })
+    }).catch(() => {
+      // Local state already updated
+    });
 
     eventBus.publish({
       type: 'BOOKING_CANCELLED',
@@ -266,7 +336,7 @@ class BookingPaymentService {
    * Reset bookings for clean state testing.
    */
   public resetToSeeds(): void {
-    this.bookings = SEED_BOOKINGS;
+    this.bookings = [...SEED_BOOKINGS];
     this.saveToStorage();
   }
 }

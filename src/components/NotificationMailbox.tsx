@@ -107,7 +107,7 @@ export const NotificationMailbox: React.FC<NotificationMailboxProps> = ({
                   onClick={() => handleSelect(item)}
                   className={`p-4 transition-colors cursor-pointer relative group flex items-start gap-3 ${
                     selectedEmail?.id === item.id
-                      ? 'bg-emerald-50/70 border-l-4 border-emerald-600'
+                      ? 'bg-emerald-50/80 ring-1 ring-inset ring-emerald-500/30'
                       : !item.read
                         ? 'bg-white font-medium hover:bg-slate-50'
                         : 'bg-slate-50/50 hover:bg-slate-100/60'

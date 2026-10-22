@@ -139,7 +139,11 @@ export const TestRunnerModal: React.FC = () => {
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                    <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      test.suite.includes('Python')
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
                       {test.suite}
                     </span>
                     <h4 className="text-xs sm:text-sm font-bold text-slate-900">{test.name}</h4>
@@ -158,8 +162,10 @@ export const TestRunnerModal: React.FC = () => {
                 <span className="font-mono text-xs text-slate-400 tabular-nums">
                   {test.durationMs}ms
                 </span>
-                <p className="text-[10px] font-semibold text-emerald-600 uppercase mt-0.5">
-                  PASSED
+                <p className={`text-[10px] font-semibold uppercase mt-0.5 ${
+                  test.passed ? 'text-emerald-600' : 'text-rose-600'
+                }`}>
+                  {test.passed ? 'PASSED' : 'FAILED'}
                 </p>
               </div>
             </div>

@@ -47,6 +47,8 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   const [selectedRosterTrip, setSelectedRosterTrip] = useState<Trip | null>(null);
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcastSent, setBroadcastSent] = useState(false);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [confirmCancelRosterId, setConfirmCancelRosterId] = useState<string | null>(null);
 
   // New trip form state
   const [newTitle, setNewTitle] = useState('');
@@ -56,13 +58,18 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   const [newCountry, setNewCountry] = useState('');
   const [newStartDate, setNewStartDate] = useState('2026-12-01');
   const [newEndDate, setNewEndDate] = useState('2026-12-10');
-  const [newDurationDays, setNewDurationDays] = useState(10);
   const [newPrice, setNewPrice] = useState(1200);
   const [newMaxSeats, setNewMaxSeats] = useState(12);
   const [newDifficulty, setNewDifficulty] = useState<TripDifficulty>('Moderate');
   const [newDescription, setNewDescription] = useState('');
   const [newHighlights, setNewHighlights] = useState('Certified UIAGM guide, Alpine huts included, Scenic summit panoramas');
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Dynamically compute durationDays from startDate and endDate
+  const computedDurationDays = Math.max(
+    1,
+    Math.ceil((new Date(newEndDate).getTime() - new Date(newStartDate).getTime()) / (1000 * 60 * 60 * 24))
+  );
 
   // RBAC Permission Guard
   const canManage = authService.hasPermission(currentUser, 'CREATE_TRIP');
@@ -99,18 +106,23 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
     e.preventDefault();
     setCreateError(null);
 
+    if (new Date(newEndDate) < new Date(newStartDate)) {
+      setCreateError('End Date must be on or after the Start Date.');
+      return;
+    }
+
     try {
       const highlightsArray = newHighlights.split(',').map(h => h.trim()).filter(Boolean);
 
       tripService.createTrip({
         title: newTitle,
-        subtitle: newSubtitle || `${newDurationDays}-Day Expedition`,
+        subtitle: newSubtitle || `${computedDurationDays}-Day Expedition`,
         category: newCategory,
         destination: newDestination,
         country: newCountry,
         startDate: newStartDate,
         endDate: newEndDate,
-        durationDays: Number(newDurationDays),
+        durationDays: computedDurationDays,
         pricePerPerson: Number(newPrice),
         currency: 'USD',
         maxSeats: Number(newMaxSeats),
@@ -141,13 +153,28 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
 
   const handleBroadcastAnnouncement = (tripId: string) => {
     if (!broadcastText.trim()) return;
+    setBroadcastError(null);
     try {
       chatService.sendMessage(tripId, broadcastText.trim(), true);
       setBroadcastText('');
       setBroadcastSent(true);
       setTimeout(() => setBroadcastSent(false), 3000);
     } catch (err: any) {
-      alert(`Error broadcasting message: ${err.message}`);
+      setBroadcastError(`Error broadcasting message: ${err.message}`);
+    }
+  };
+
+  const handleOrganizerCancelBooking = (bookingId: string) => {
+    try {
+      bookingPaymentService.cancelBooking(bookingId, 'Cancelled by Trip Organizer');
+      setConfirmCancelRosterId(null);
+      onRefreshData();
+      if (selectedRosterTrip) {
+        const updatedTrip = tripService.getTripById(selectedRosterTrip.id);
+        if (updatedTrip) setSelectedRosterTrip({ ...updatedTrip });
+      }
+    } catch (err: any) {
+      setBroadcastError(err.message || 'Failed to cancel participant booking');
     }
   };
 
@@ -343,6 +370,9 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
               {broadcastSent && (
                 <p className="text-[11px] text-emerald-600 font-medium">✓ Announcement pinned in trip chat!</p>
               )}
+              {broadcastError && (
+                <p className="text-[11px] text-rose-600 font-medium">{broadcastError}</p>
+              )}
             </div>
 
             {/* Roster List */}
@@ -356,14 +386,23 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
               ) : (
                 rosterBookings.map(b => (
                   <div key={b.id} className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-2.5">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-2">
                       <div>
                         <h4 className="text-sm font-bold text-slate-900">{b.participantName}</h4>
                         <p className="text-xs text-slate-500">{b.participantEmail} · {b.participantPhone}</p>
                       </div>
-                      <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                        {b.bookingCode}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
+                          b.status === 'cancelled'
+                            ? 'bg-rose-50 text-rose-600'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}>
+                          {b.status}
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                          {b.bookingCode}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100">
@@ -380,11 +419,39 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                       </div>
                     </div>
 
-                    {b.specialRequirements && (
-                      <p className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg">
-                        <strong>Dietary/Medical Note:</strong> {b.specialRequirements}
-                      </p>
-                    )}
+                    <div className="flex items-center justify-between pt-1">
+                      {b.specialRequirements ? (
+                        <p className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg flex-1 mr-2">
+                          <strong>Dietary/Medical Note:</strong> {b.specialRequirements}
+                        </p>
+                      ) : <span />}
+
+                      {b.status === 'confirmed' && (
+                        confirmCancelRosterId === b.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleOrganizerCancelBooking(b.id)}
+                              className="px-2.5 py-1 bg-rose-600 text-white rounded-lg text-[11px] font-semibold"
+                            >
+                              Confirm Cancel
+                            </button>
+                            <button
+                              onClick={() => setConfirmCancelRosterId(null)}
+                              className="px-2 py-1 text-slate-500 text-[11px]"
+                            >
+                              Keep
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmCancelRosterId(b.id)}
+                            className="text-[11px] text-rose-600 hover:underline font-medium shrink-0"
+                          >
+                            Cancel Booking
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 ))
               )}

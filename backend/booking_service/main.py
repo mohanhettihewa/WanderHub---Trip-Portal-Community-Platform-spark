@@ -4,12 +4,23 @@ Port: 8003
 Framework: FastAPI (Python 3.10+ / 3.12+), Pydantic v2
 """
 
+import os
+import sys
 from typing import List, Optional
 from datetime import datetime
 import asyncio
-from fastapi import FastAPI, Depends, HTTPException, Query, status
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+try:
+    from fastapi import FastAPI, Depends, HTTPException, Query, status
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel, Field
+except ImportError:
+    from fastapi_runtime import (
+        FastAPI, Depends, HTTPException, Query, status,
+        CORSMiddleware, BaseModel, Field
+    )
 
 app = FastAPI(
     title="WanderHub Booking & Payment Microservice",

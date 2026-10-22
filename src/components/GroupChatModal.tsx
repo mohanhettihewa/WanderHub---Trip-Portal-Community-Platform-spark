@@ -33,6 +33,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [asAnnouncement, setAsAnnouncement] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const canPostAnnouncement = currentUser.role === 'Organizer';
@@ -55,6 +56,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    setSendError(null);
 
     try {
       chatService.sendMessage(trip.id, inputText.trim(), asAnnouncement && canPostAnnouncement);
@@ -62,7 +64,7 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({
       setAsAnnouncement(false);
       loadMessages();
     } catch (err: any) {
-      alert(err.message || 'Failed to send message');
+      setSendError(err.message || 'Failed to send message');
     }
   };
 
@@ -181,6 +183,11 @@ export const GroupChatModal: React.FC<GroupChatModalProps> = ({
 
         {/* Message Input Footer */}
         <form onSubmit={handleSend} className="p-3 bg-white border-t border-slate-200 shrink-0 space-y-2">
+          {sendError && (
+            <div className="px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-700 font-medium">
+              {sendError}
+            </div>
+          )}
           {canPostAnnouncement && (
             <label className="flex items-center gap-1.5 text-[11px] text-amber-800 cursor-pointer select-none">
               <input
