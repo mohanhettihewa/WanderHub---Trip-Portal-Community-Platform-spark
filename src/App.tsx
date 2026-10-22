@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { User, Trip, Booking } from './types';
+import { User, Trip, Booking, GlobalSearchFilters } from './types';
 import { authService } from './services/authService';
 import { tripService } from './services/tripService';
 import { notificationService } from './services/notificationService';
@@ -26,6 +26,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'explore' | 'organizer' | 'my-trips' | 'inbox' | 'tests' | 'fastapi'>('explore');
   const [isAndroidView, setIsAndroidView] = useState<boolean>(false);
 
+  // Global search filters (destination, date range, organizer name)
+  const [searchFilters, setSearchFilters] = useState<GlobalSearchFilters>({
+    destination: '',
+    startDate: '',
+    endDate: '',
+    organizerName: 'All'
+  });
+  const [selectedExploreTrip, setSelectedExploreTrip] = useState<Trip | null>(null);
+
   // Active modals
   const [checkoutTrip, setCheckoutTrip] = useState<Trip | null>(null);
   const [chatTrip, setChatTrip] = useState<Trip | null>(null);
@@ -44,12 +53,40 @@ export default function App() {
     }
   };
 
+  // Filter trips globally by destination, date range, and organizer name
+  const globallyFilteredTrips = trips.filter(trip => {
+    if (searchFilters.destination.trim()) {
+      const q = searchFilters.destination.toLowerCase().trim();
+      const match = trip.destination.toLowerCase().includes(q) ||
+                    trip.country.toLowerCase().includes(q) ||
+                    trip.title.toLowerCase().includes(q) ||
+                    trip.category.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    if (searchFilters.startDate) {
+      if (new Date(trip.startDate) < new Date(searchFilters.startDate)) {
+        return false;
+      }
+    }
+    if (searchFilters.endDate) {
+      if (new Date(trip.endDate) > new Date(searchFilters.endDate)) {
+        return false;
+      }
+    }
+    if (searchFilters.organizerName && searchFilters.organizerName !== 'All') {
+      if (trip.organizerName.toLowerCase() !== searchFilters.organizerName.toLowerCase()) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   const unreadCount = notificationService.getNotificationsForUser(currentUser.email).filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
       
-      {/* 3-Zone Top Navigation Bar */}
+      {/* 3-Zone Top Navigation Bar with Global Search Component */}
       <Navbar
         currentUser={currentUser}
         onUserChange={handleUserChange}
@@ -58,13 +95,24 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         unreadCount={unreadCount}
+        trips={trips}
+        searchFilters={searchFilters}
+        onFiltersChange={setSearchFilters}
+        onSelectTrip={(trip) => {
+          setSelectedExploreTrip(trip);
+          setActiveTab('explore');
+        }}
       />
 
       {/* Main Viewport Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
         {activeTab === 'explore' && (
           <ParticipantView
-            trips={trips}
+            trips={globallyFilteredTrips}
+            searchFilters={searchFilters}
+            onClearFilters={() => setSearchFilters({ destination: '', startDate: '', endDate: '', organizerName: 'All' })}
+            externalModalTrip={selectedExploreTrip}
+            onClearExternalModalTrip={() => setSelectedExploreTrip(null)}
             onBookTrip={(trip) => setCheckoutTrip(trip)}
             onOpenChat={(trip) => setChatTrip(trip)}
           />

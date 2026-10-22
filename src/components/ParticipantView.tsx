@@ -23,24 +23,40 @@ import {
   Snowflake,
   Sparkles
 } from 'lucide-react';
-import { Trip, TripCategory, TripDifficulty } from '../types';
+import { Trip, TripCategory, TripDifficulty, GlobalSearchFilters } from '../types';
 
 interface ParticipantViewProps {
   trips: Trip[];
   onBookTrip: (trip: Trip) => void;
   onOpenChat: (trip: Trip) => void;
+  externalModalTrip?: Trip | null;
+  onClearExternalModalTrip?: () => void;
+  searchFilters?: GlobalSearchFilters;
+  onClearFilters?: () => void;
 }
 
 export const ParticipantView: React.FC<ParticipantViewProps> = ({
   trips,
   onBookTrip,
-  onOpenChat
+  onOpenChat,
+  externalModalTrip,
+  onClearExternalModalTrip,
+  searchFilters,
+  onClearFilters
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeModalTrip, setActiveModalTrip] = useState<Trip | null>(null);
+  const [internalModalTrip, setInternalModalTrip] = useState<Trip | null>(null);
   const [itineraryTab, setItineraryTab] = useState<'overview' | 'itinerary' | 'equipment' | 'policy'>('overview');
+
+  const activeModalTrip = externalModalTrip || internalModalTrip;
+  const setActiveModalTrip = (trip: Trip | null) => {
+    setInternalModalTrip(trip);
+    if (!trip && onClearExternalModalTrip) {
+      onClearExternalModalTrip();
+    }
+  };
 
   const categories: (TripCategory | 'All')[] = [
     'All',
@@ -144,9 +160,31 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({
         ))}
       </div>
 
-      {/* Trips Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTrips.map((trip) => {
+      {/* Trips Grid or Empty State */}
+      {filteredTrips.length === 0 ? (
+        <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-sm space-y-4 max-w-lg mx-auto my-8">
+          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+            <Compass className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900 font-display">No Expeditions Found</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            No expeditions match your current destination, date range, or organizer filters.
+          </p>
+          <button
+            onClick={() => {
+              setSelectedCategory('All');
+              setSelectedDifficulty('All');
+              setSearchQuery('');
+              if (onClearFilters) onClearFilters();
+            }}
+            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors shadow-sm"
+          >
+            Reset All Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredTrips.map((trip) => {
           const remainingSeats = trip.maxSeats - trip.bookedSeats;
           const isAlmostFull = remainingSeats <= 3 && remainingSeats > 0;
           const isSoldOut = remainingSeats === 0;
@@ -259,6 +297,7 @@ export const ParticipantView: React.FC<ParticipantViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* FULL TRIP DETAILS MODAL */}
       {activeModalTrip && (

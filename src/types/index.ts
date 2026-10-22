@@ -145,6 +145,13 @@ export interface EmailNotification {
   };
 }
 
+export interface GlobalSearchFilters {
+  destination: string;
+  startDate?: string;
+  endDate?: string;
+  organizerName?: string;
+}
+
 export interface TestResult {
   id: string;
   suite: string;

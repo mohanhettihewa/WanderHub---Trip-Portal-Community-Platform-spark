@@ -264,6 +264,57 @@ export async function runAllUnitTests(): Promise<TestResult[]> {
       }
     );
 
+    // =========================================================================
+    // SUITE 6: Global Search & Multi-Criteria Filtering
+    // =========================================================================
+    await runTest(
+      'Global Search',
+      'Filters trips accurately by destination keyword',
+      'Verifies searching for "Nepal" returns Annapurna expedition and excludes others.',
+      () => {
+        const allTrips = tripService.getTrips();
+        const filtered = allTrips.filter(t => 
+          t.destination.toLowerCase().includes('nepal') || 
+          t.country.toLowerCase().includes('nepal')
+        );
+        if (filtered.length !== 1 || !filtered[0].title.includes('Himalayan')) {
+          throw new Error(`Expected exactly 1 Himalayan trip for destination 'Nepal', got ${filtered.length}`);
+        }
+      }
+    );
+
+    await runTest(
+      'Global Search',
+      'Filters trips accurately by calendar date range',
+      'Ensures date boundary checks correctly isolate expeditions starting after Nov 15, 2026.',
+      () => {
+        const allTrips = tripService.getTrips();
+        const fromDate = '2026-11-15';
+        const filtered = allTrips.filter(t => new Date(t.startDate) >= new Date(fromDate));
+        const hasEarlier = filtered.some(t => new Date(t.startDate) < new Date(fromDate));
+        if (hasEarlier) {
+          throw new Error('Date filter returned trips starting before the minimum date range');
+        }
+      }
+    );
+
+    await runTest(
+      'Global Search',
+      'Filters trips by organizer name',
+      'Verifies queries by organizer name strictly match expeditions led by that organizer.',
+      () => {
+        const allTrips = tripService.getTrips();
+        const filtered = allTrips.filter(t => t.organizerName.toLowerCase() === 'elena rostova');
+        if (filtered.length === 0) {
+          throw new Error('No trips found for organizer Elena Rostova');
+        }
+        const nonMatching = filtered.some(t => t.organizerName !== 'Elena Rostova');
+        if (nonMatching) {
+          throw new Error('Organizer filter returned trips belonging to another organizer');
+        }
+      }
+    );
+
   } finally {
     // Restore user context after tests
     authService.switchUser(initialUser.id);

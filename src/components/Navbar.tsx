@@ -7,8 +7,9 @@
 
 import React from 'react';
 import { Compass, Smartphone, Monitor, ShieldCheck, Mail, Terminal, FileCode2 } from 'lucide-react';
-import { User, UserRole } from '../types';
+import { User, Trip, GlobalSearchFilters } from '../types';
 import { authService } from '../services/authService';
+import { GlobalSearch } from './GlobalSearch';
 
 interface NavbarProps {
   currentUser: User;
@@ -18,6 +19,10 @@ interface NavbarProps {
   activeTab: 'explore' | 'organizer' | 'my-trips' | 'inbox' | 'tests' | 'fastapi';
   onSelectTab: (tab: 'explore' | 'organizer' | 'my-trips' | 'inbox' | 'tests' | 'fastapi') => void;
   unreadCount: number;
+  trips: Trip[];
+  searchFilters: GlobalSearchFilters;
+  onFiltersChange: (filters: GlobalSearchFilters) => void;
+  onSelectTrip: (trip: Trip) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,7 +32,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleAndroidView,
   activeTab,
   onSelectTab,
-  unreadCount
+  unreadCount,
+  trips,
+  searchFilters,
+  onFiltersChange,
+  onSelectTrip
 }) => {
   const allUsers = authService.getAllUsers();
 
@@ -40,18 +49,34 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
         
-        {/* Zone 1: Single text element wordmark */}
-        <button
-          onClick={() => onSelectTab('explore')}
-          className="flex items-center gap-2.5 text-left group focus:outline-none"
-        >
-          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
-            <Compass className="w-4 h-4 text-emerald-400" />
+        {/* Zone 1: Wordmark & Global Search */}
+        <div className="flex items-center gap-4 lg:gap-6 flex-1 max-w-xl">
+          <button
+            onClick={() => onSelectTab('explore')}
+            className="flex items-center gap-2.5 text-left group focus:outline-none shrink-0"
+          >
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
+              <Compass className="w-4 h-4 text-emerald-400" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap font-display">
+              WanderHub
+            </span>
+          </button>
+
+          {/* Global Search Bar (Destination, Date Range, Organizer) */}
+          <div className="hidden sm:block flex-1 max-w-sm">
+            <GlobalSearch
+              trips={trips}
+              searchFilters={searchFilters}
+              onFiltersChange={onFiltersChange}
+              onSelectTrip={(trip) => {
+                onSelectTrip(trip);
+                onSelectTab('explore');
+              }}
+              onViewAllResults={() => onSelectTab('explore')}
+            />
           </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap font-display">
-            WanderHub
-          </span>
-        </button>
+        </div>
 
         {/* Zone 2: 4-5 single-line clean text navigation links */}
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
@@ -181,6 +206,53 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
       </div>
+
+      {/* Mobile Global Search Bar */}
+      <div className="sm:hidden px-4 pb-3 pt-1 border-t border-slate-100 bg-white">
+        <GlobalSearch
+          trips={trips}
+          searchFilters={searchFilters}
+          onFiltersChange={onFiltersChange}
+          onSelectTrip={(trip) => {
+            onSelectTrip(trip);
+            onSelectTab('explore');
+          }}
+          onViewAllResults={() => onSelectTab('explore')}
+        />
+      </div>
+
+      {/* Active Global Search Filters Ribbon */}
+      {(Boolean(searchFilters.destination) || Boolean(searchFilters.startDate) || Boolean(searchFilters.endDate) || (Boolean(searchFilters.organizerName) && searchFilters.organizerName !== 'All')) && (
+        <div className="bg-emerald-50/90 border-t border-emerald-100 px-4 sm:px-6 lg:px-8 py-1.5 flex items-center justify-between text-xs text-emerald-950">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <span className="font-semibold text-emerald-800 text-[11px] uppercase tracking-wider shrink-0">
+              Filtered By:
+            </span>
+            {searchFilters.destination && (
+              <span className="bg-white border border-emerald-200 px-2 py-0.5 rounded-md font-medium text-[11px] shrink-0">
+                Destination: "{searchFilters.destination}"
+              </span>
+            )}
+            {(searchFilters.startDate || searchFilters.endDate) && (
+              <span className="bg-white border border-emerald-200 px-2 py-0.5 rounded-md font-mono text-[11px] shrink-0">
+                Dates: {searchFilters.startDate || 'Any'} → {searchFilters.endDate || 'Any'}
+              </span>
+            )}
+            {searchFilters.organizerName && searchFilters.organizerName !== 'All' && (
+              <span className="bg-white border border-emerald-200 px-2 py-0.5 rounded-md font-medium text-[11px] shrink-0">
+                Organizer: {searchFilters.organizerName}
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={() => onFiltersChange({ destination: '', startDate: '', endDate: '', organizerName: 'All' })}
+            className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 underline shrink-0 ml-4"
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
     </header>
   );
 };
